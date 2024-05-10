@@ -1,0 +1,5 @@
+{
+  "mountpoint": "/var/lib/openpanel",
+  "defaultSize": "1G",
+  "storageDriver": "local"
+}
