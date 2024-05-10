@@ -4,6 +4,19 @@ Docker Volume plugin for OpenPanel
 
 ## Installation
 
+
+```bash
+{
+  "plugins": {
+    "volumes": {
+      "enabled": true,
+      "plugin_dir": "/var/lib/docker/plugins",
+      "scan_on_start": true
+    }
+  }
+}
+```
+
 Create folder:
 ```bash
 mkdir -p /etc/docker/plugins/openvolume
