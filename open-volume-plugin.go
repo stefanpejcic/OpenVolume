@@ -45,9 +45,6 @@ func NewOpenVolumePlugin(configFile string) (*OpenVolumePlugin, error) {
 	}, nil
 }
 
-func (p *OpenVolumePlugin) Create(r volume.Request) volume.Response {
-	// Implement volume creation logic here
-}
 
 
 func (p *OpenVolumePlugin) Remove(r volume.Request) volume.Response {
@@ -71,15 +68,23 @@ func (p *OpenVolumePlugin) Remove(r volume.Request) volume.Response {
 
 
 func (p *OpenVolumePlugin) Mount(r volume.Request) volume.Response {
-	// Implement volume mounting logic here
+	mountpoint := filepath.Join(p.mountpoint, r.Name)
+	if _, err := os.Stat(mountpoint); os.IsNotExist(err) {
+		log.Printf("Volume %s does not exist", r.Name)
+		return volume.Response{Err: fmt.Sprintf("Volume %s does not exist", r.Name)}
+	}
+
+	return volume.Response{Mountpoint: mountpoint}
 }
 
+
+
 func (p *OpenVolumePlugin) Unmount(r volume.Request) volume.Response {
-	// Implement volume unmounting logic here
+	return volume.Response{}
 }
 
 func (p *OpenVolumePlugin) Capabilities(r volume.Request) volume.Response {
-	return volume.Response{Capabilities: volume.Capability{Scope: p.StorageDriver}}
+	return volume.Response{Capabilities: volume.Capability{Scope: "local"}}
 }
 
 func (p *OpenVolumePlugin) Resize(r volume.Request) volume.Response {
