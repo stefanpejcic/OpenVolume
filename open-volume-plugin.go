@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/docker/go-plugins-helpers/volume"
 )
@@ -25,7 +26,7 @@ type OpenVolumePlugin struct {
 	StorageDriver string
 }
 
-func NewOpenVolumePlugin(configFile string) (*OpenVolumePlugin, error) {
+func NewOpenVolumePlugin(configFile string, customMountpoint string) (*OpenVolumePlugin, error) {
 	file, err := os.Open(configFile)
 	if err != nil {
 		return nil, err
@@ -38,6 +39,10 @@ func NewOpenVolumePlugin(configFile string) (*OpenVolumePlugin, error) {
 		return nil, err
 	}
 
+	if customMountpoint != "" {
+		config.Mountpoint = customMountpoint
+	}
+
 	return &OpenVolumePlugin{
 		Mountpoint:    config.Mountpoint,
 		DefaultSize:   config.DefaultSize,
@@ -45,51 +50,47 @@ func NewOpenVolumePlugin(configFile string) (*OpenVolumePlugin, error) {
 	}, nil
 }
 
-
-
 func (p *OpenVolumePlugin) Create(r volume.Request) volume.Response {
 	mountpoint := filepath.Join(p.Mountpoint, r.Name)
-	if _, err := os.Stat(mountpoint); os.IsNotExist(err) {
-		size := r.Options["size"]
-		if size == "" {
-			size = p.DefaultSize // Use default size from config if size is not specified
-		}
-		cmd := exec.Command("truncate", "-s", size, filepath.Join(mountpoint, "data.img"))
-		err := cmd.Run()
-		if err != nil {
-			log.Printf("Failed to create volume %s: %s", r.Name, err.Error())
-			return volume.Response{Err: fmt.Sprintf("Failed to create volume %s", r.Name)}
-		}
-		log.Printf("Created volume %s with size %s", r.Name, size)
-	} else {
+	if _, err := os.Stat(mountpoint); !os.IsNotExist(err) {
 		log.Printf("Volume %s already exists", r.Name)
+		return volume.Response{}
 	}
+
+	size := r.Options["size"]
+	if size == "" {
+		size = p.DefaultSize // Use default size from config if size is not specified
+	}
+
+	cmd := exec.Command("truncate", "-s", size, filepath.Join(mountpoint, "data.img"))
+	err := cmd.Run()
+	if err != nil {
+		log.Printf("Failed to create volume %s: %s", r.Name, err.Error())
+		return volume.Response{Err: fmt.Sprintf("Failed to create volume %s", r.Name)}
+	}
+
+	log.Printf("Created volume %s with size %s", r.Name, size)
 	return volume.Response{}
 }
 
-
 func (p *OpenVolumePlugin) Remove(r volume.Request) volume.Response {
-	mountpoint := filepath.Join(p.mountpoint, r.Name)
-	if _, err := os.Stat(mountpoint); err == nil {
-		if err := os.RemoveAll(mountpoint); err != nil {
-			log.Printf("Failed to remove volume %s: %s", r.Name, err.Error())
-			return volume.Response{Err: fmt.Sprintf("Failed to remove volume %s", r.Name)}
-		}
-		log.Printf("Removed volume %s", r.Name)
-	} else if os.IsNotExist(err) {
+	mountpoint := filepath.Join(p.Mountpoint, r.Name)
+	if _, err := os.Stat(mountpoint); os.IsNotExist(err) {
 		log.Printf("Volume %s does not exist", r.Name)
-	} else {
+		return volume.Response{}
+	}
+
+	if err := os.RemoveAll(mountpoint); err != nil {
 		log.Printf("Failed to remove volume %s: %s", r.Name, err.Error())
 		return volume.Response{Err: fmt.Sprintf("Failed to remove volume %s", r.Name)}
 	}
+
+	log.Printf("Removed volume %s", r.Name)
 	return volume.Response{}
 }
 
-
-
-
 func (p *OpenVolumePlugin) Mount(r volume.Request) volume.Response {
-	mountpoint := filepath.Join(p.mountpoint, r.Name)
+	mountpoint := filepath.Join(p.Mountpoint, r.Name)
 	if _, err := os.Stat(mountpoint); os.IsNotExist(err) {
 		log.Printf("Volume %s does not exist", r.Name)
 		return volume.Response{Err: fmt.Sprintf("Volume %s does not exist", r.Name)}
@@ -97,8 +98,6 @@ func (p *OpenVolumePlugin) Mount(r volume.Request) volume.Response {
 
 	return volume.Response{Mountpoint: mountpoint}
 }
-
-
 
 func (p *OpenVolumePlugin) Unmount(r volume.Request) volume.Response {
 	return volume.Response{}
@@ -138,6 +137,7 @@ func (p *OpenVolumePlugin) Resize(r volume.Request) volume.Response {
 		log.Printf("Failed to resize volume %s: %s", r.Name, err.Error())
 		return volume.Response{Err: fmt.Sprintf("Failed to resize volume %s", r.Name)}
 	}
+
 	log.Printf("Resized volume %s to %dG", r.Name, requestedSize/(1024*1024*1024))
 	return volume.Response{}
 }
@@ -165,8 +165,53 @@ func (p *OpenVolumePlugin) getVolumeSize(mountpoint string) int64 {
 	return size
 }
 
+
+func (p *OpenVolumePlugin) Backup(r volume.Request) volume.Response {
+	mountpoint := filepath.Join(p.Mountpoint, r.Name)
+	backupPath := r.Options["backup_path"]
+	backupFilename := r.Options["backup_filename"]
+
+	if _, err := os.Stat(mountpoint); os.IsNotExist(err) {
+		log.Printf("Volume %s does not exist", r.Name)
+		return volume.Response{Err: fmt.Sprintf("Volume %s does not exist", r.Name)}
+	}
+
+	cmd := exec.Command("tar", "-czf", filepath.Join(backupPath, backupFilename+".tar.gz"), "-C", mountpoint, ".")
+	err := cmd.Run()
+	if err != nil {
+		log.Printf("Failed to backup volume %s: %s", r.Name, err.Error())
+		return volume.Response{Err: fmt.Sprintf("Failed to backup volume %s", r.Name)}
+	}
+
+	log.Printf("Backup of volume %s created at %s", r.Name, filepath.Join(backupPath, backupFilename+".tar.gz"))
+	return volume.Response{}
+}
+
+
+func (p *OpenVolumePlugin) Restore(r volume.Request) volume.Response {
+	mountpoint := filepath.Join(p.Mountpoint, r.Name)
+	backupPath := r.Options["backup_path"]
+	backupFilename := r.Options["backup_filename"]
+
+	if _, err := os.Stat(filepath.Join(backupPath, backupFilename+".tar.gz")); os.IsNotExist(err) {
+		log.Printf("Backup file %s does not exist", filepath.Join(backupPath, backupFilename+".tar.gz"))
+		return volume.Response{Err: fmt.Sprintf("Backup file %s does not exist", filepath.Join(backupPath, backupFilename+".tar.gz"))}
+	}
+
+	cmd := exec.Command("tar", "-xzf", filepath.Join(backupPath, backupFilename+".tar.gz"), "-C", mountpoint)
+	err := cmd.Run()
+	if err != nil {
+		log.Printf("Failed to restore backup for volume %s: %s", r.Name, err.Error())
+		return volume.Response{Err: fmt.Sprintf("Failed to restore backup for volume %s", r.Name)}
+	}
+
+	log.Printf("Backup for volume %s restored from %s", r.Name, filepath.Join(backupPath, backupFilename+".tar.gz"))
+	return volume.Response{}
+}
+
+
 func main() {
-	plugin, err := NewOpenVolumePlugin("config.json")
+	plugin, err := NewOpenVolumePlugin("config.json", "") // Use empty string for default mountpoint
 	if err != nil {
 		log.Fatalf("Failed to initialize OpenVolumePlugin: %s", err)
 	}
