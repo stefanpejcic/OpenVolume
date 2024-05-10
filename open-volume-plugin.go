@@ -48,11 +48,11 @@ func NewOpenVolumePlugin(configFile string) (*OpenVolumePlugin, error) {
 
 
 func (p *OpenVolumePlugin) Create(r volume.Request) volume.Response {
-	mountpoint := filepath.Join(p.mountpoint, r.Name)
+	mountpoint := filepath.Join(p.Mountpoint, r.Name)
 	if _, err := os.Stat(mountpoint); os.IsNotExist(err) {
 		size := r.Options["size"]
 		if size == "" {
-			size = "1G" // Default to 1GB if size is not specified
+			size = p.DefaultSize // Use default size from config if size is not specified
 		}
 		cmd := exec.Command("truncate", "-s", size, filepath.Join(mountpoint, "data.img"))
 		err := cmd.Run()
