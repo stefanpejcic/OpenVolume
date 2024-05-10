@@ -49,9 +49,26 @@ func (p *OpenVolumePlugin) Create(r volume.Request) volume.Response {
 	// Implement volume creation logic here
 }
 
+
 func (p *OpenVolumePlugin) Remove(r volume.Request) volume.Response {
-	// Implement volume removal logic here
+	mountpoint := filepath.Join(p.mountpoint, r.Name)
+	if _, err := os.Stat(mountpoint); err == nil {
+		if err := os.RemoveAll(mountpoint); err != nil {
+			log.Printf("Failed to remove volume %s: %s", r.Name, err.Error())
+			return volume.Response{Err: fmt.Sprintf("Failed to remove volume %s", r.Name)}
+		}
+		log.Printf("Removed volume %s", r.Name)
+	} else if os.IsNotExist(err) {
+		log.Printf("Volume %s does not exist", r.Name)
+	} else {
+		log.Printf("Failed to remove volume %s: %s", r.Name, err.Error())
+		return volume.Response{Err: fmt.Sprintf("Failed to remove volume %s", r.Name)}
+	}
+	return volume.Response{}
 }
+
+
+
 
 func (p *OpenVolumePlugin) Mount(r volume.Request) volume.Response {
 	// Implement volume mounting logic here
