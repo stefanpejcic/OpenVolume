@@ -60,3 +60,9 @@ docker volume create --driver openvolume --name myvolume --opt size=1GB
 
 Replace 'myvolume' with the desired name for your volume, and adjust the size as needed.
 
+
+```bash
+docker volume resize myvolume --size=5G
+```
+
+
