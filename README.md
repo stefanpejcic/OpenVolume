@@ -68,5 +68,6 @@ docker volume resize myvolume --size=5G
 
 ## TODO:
 - `--private` flag to limit volume to a single contianer.
+- list `openvolume` volumes on this host
 - 
 
