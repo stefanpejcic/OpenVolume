@@ -1,5 +1,5 @@
 # OpenVolume
-Docker Volume plugin for OpenPanel
+Docker Volume plugin for [OpenPanel](https://openpanel.co)
 
 
 ### Installation
@@ -65,4 +65,8 @@ Replace 'myvolume' with the desired name for your volume, and adjust the size as
 docker volume resize myvolume --size=5G
 ```
 
+
+## TODO:
+- `--private` flag to limit volume to a single contianer.
+- 
 
